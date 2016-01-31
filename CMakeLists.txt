@@ -227,6 +227,196 @@ IF(NOT DEFINED VMIME_INSTALL_LIBDIR)
 	ENDIF()
 ENDIF()
 
+# Installation of libraries
+IF(VMIME_BUILD_SHARED_LIBRARY)
+	INSTALL(
+		TARGETS ${VMIME_LIBRARY_NAME}
+		LIBRARY DESTINATION "${VMIME_INSTALL_LIBDIR}" COMPONENT sharedlibs
+		ARCHIVE DESTINATION "${VMIME_INSTALL_LIBDIR}" COMPONENT sharedlibs
+	)
+ENDIF()
+
+IF(VMIME_BUILD_STATIC_LIBRARY)
+	INSTALL(
+		TARGETS ${VMIME_LIBRARY_NAME}-static
+		LIBRARY DESTINATION "${VMIME_INSTALL_LIBDIR}" COMPONENT staticlibs
+		ARCHIVE DESTINATION "${VMIME_INSTALL_LIBDIR}" COMPONENT staticlibs
+	)
+ENDIF()
+
+# Installation of header files
+INSTALL_HEADERS_WITH_DIRECTORY(VMIME_LIBRARY_INCLUDE_FILES headers src/)
+INSTALL_HEADERS_WITH_DIRECTORY(VMIME_LIBRARY_GENERATED_INCLUDE_FILES headers src/)
+
+#INSTALL(
+#	FILES ${VMIME_LIBRARY_INCLUDE_FILES}
+#	DESTINATION include
+#	COMPONENT headers
+#)
+
+
+##############################################################################
+# Tests
+
+OPTION(
+	VMIME_BUILD_TESTS
+	"Build unit tests (this will create a 'run-tests' binary)"
+	OFF
+)
+
+IF(VMIME_BUILD_TESTS)
+
+	ENABLE_TESTING()
+
+	INCLUDE(cmake/FindCppUnit.cmake)
+	INCLUDE_DIRECTORIES(${CPPUNIT_INCLUDE_DIR})
+
+	FILE(
+		GLOB_RECURSE
+		VMIME_TESTS_SRC_FILES
+		${CMAKE_CURRENT_SOURCE_DIR}/tests/*Test.cpp
+	)
+
+	ADD_LIBRARY(
+		test-runner
+		${CMAKE_CURRENT_SOURCE_DIR}/tests/testRunner.cpp ${CMAKE_CURRENT_SOURCE_DIR}/tests/testUtils.cpp
+	)
+
+	# Build one file for each test
+	FOREACH(VMIME_TEST_SRC_FILE ${VMIME_TESTS_SRC_FILES})
+
+		# "/path/to/vmime/tests/module/testFile.cpp" --> "module_testFile"
+		GET_FILENAME_COMPONENT(VMIME_TEST_SRC_PATH "${VMIME_TEST_SRC_FILE}" PATH)
+		STRING(REPLACE "${CMAKE_CURRENT_SOURCE_DIR}" "" VMIME_TEST_SRC_PATH "${VMIME_TEST_SRC_PATH}")
+		GET_FILENAME_COMPONENT(VMIME_TEST_NAME "${VMIME_TEST_SRC_FILE}" NAME_WE)
+		SET(VMIME_TEST_NAME "${VMIME_TEST_SRC_PATH}/${VMIME_TEST_NAME}")
+		STRING(REPLACE "/" "_" VMIME_TEST_NAME "${VMIME_TEST_NAME}")
+		STRING(REPLACE "_tests_" "" VMIME_TEST_NAME "${VMIME_TEST_NAME}")
+
+		ADD_EXECUTABLE(
+			${VMIME_TEST_NAME}
+			${VMIME_TEST_SRC_FILE}
+		)
+
+		TARGET_LINK_LIBRARIES(
+			${VMIME_TEST_NAME}
+			${VMIME_LIBRARY_NAME}
+			${CPPUNIT_LIBRARY} test-runner
+		)
+
+		ADD_DEPENDENCIES(
+			${VMIME_TEST_NAME}
+			${VMIME_LIBRARY_NAME}
+		)
+
+		ADD_TEST(
+			${VMIME_TEST_NAME}
+			${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${VMIME_TEST_NAME}
+		)
+
+	ENDFOREACH()
+
+	# Build one file for all tests
+	ADD_EXECUTABLE(
+		"run-tests"
+		${VMIME_TESTS_SRC_FILES}
+	)
+
+	TARGET_LINK_LIBRARIES(
+		"run-tests"
+		${VMIME_LIBRARY_NAME}
+		${CPPUNIT_LIBRARY} test-runner
+	)
+
+	ADD_DEPENDENCIES(
+		"run-tests"
+		${VMIME_LIBRARY_NAME}
+	)
+
+ENDIF()
+
+
+##############################################################################
+# Examples
+
+OPTION(
+	VMIME_BUILD_SAMPLES
+	"Build samples (in 'examples' directory)"
+	ON
+)
+
+
+##############################################################################
+# Packaging / Distribution
+
+# Package information
+SET(VMIME_PACKAGE_NAME         ${VMIME_LIBRARY_NAME})
+SET(VMIME_PACKAGE_VERSION      ${VMIME_VERSION})
+SET(VMIME_PACKAGE_CONTACT      "Vincent Richard <vincent@vmime.org>")
+SET(VMIME_PACKAGE_DESCRIPTION  "VMime C++ Mail Library (http://www.vmime.org)")
+
+SET(CPACK_PACKAGE_NAME                 "${VMIME_PACKAGE_NAME}")
+SET(CPACK_PACKAGE_CONTACT              "${VMIME_PACKAGE_CONTACT}")
+SET(CPACK_PACKAGE_DESCRIPTION          "${VMIME_PACKAGE_DESCRIPTION}")
+SET(CPACK_PACKAGE_DESCRIPTION_SUMMARY  "${CPACK_PACKAGE_DESCRIPTION}")
+SET(CPACK_PACKAGE_VERSION              "${VMIME_PACKAGE_VERSION}")
+
+# Package settings
+SET(CPACK_RESOURCE_FILE_LICENSE        ${CMAKE_CURRENT_SOURCE_DIR}/COPYING)
+
+IF(APPLE)
+	# CPack/PackageManager won't allow file without recognized extension
+	# to be used as license file.
+	CONFIGURE_FILE("${CMAKE_CURRENT_SOURCE_DIR}/COPYING" "${CMAKE_CURRENT_BINARY_DIR}/COPYING.txt" COPYONLY)
+	SET(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_BINARY_DIR}/COPYING.txt")
+ELSE()
+	SET(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/COPYING")
+ENDIF(APPLE)
+
+SET(CPACK_SOURCE_GENERATOR             TGZ)
+SET(CPACK_SOURCE_IGNORE_FILES          "\\\\.git;~$;build/")
+SET(CPACK_SOURCE_PACKAGE_FILE_NAME     ${CPACK_PACKAGE_NAME}-${CPACK_PACKAGE_VERSION})
+
+# Set components
+SET(CPACK_COMPONENTS_ALL sharedlibs staticlibs headers)
+
+SET(CPACK_COMPONENT_SHAREDLIBS_DISPLAY_NAME "Shared libraries")
+SET(CPACK_COMPONENT_SHAREDLIBS_DESCRIPTION
+	"Shared library for general use.")
+
+SET(CPACK_COMPONENT_STATICLIBS_DISPLAY_NAME "Static libraries")
+SET(CPACK_COMPONENT_STATICLIBS_DESCRIPTION
+	"Static library, good if you want to embed VMime in your application.")
+
+SET(CPACK_COMPONENT_HEADERS_DISPLAY_NAME "C++ Headers")
+SET(CPACK_COMPONENT_HEADERS_DESCRIPTION
+	"C/C++ header files.")
+
+SET(CPACK_COMPONENT_SHAREDLIBS_GROUP "Development")
+SET(CPACK_COMPONENT_STATICLIBS_GROUP "Development")
+SET(CPACK_COMPONENT_HEADERS_GROUP    "Development")
+SET(CPACK_COMPONENT_GROUP_DEVELOPMENT_DESCRIPTION "")
+
+# Make a target "dist" to generate tarball
+SET(ARCHIVE_NAME ${CPACK_PACKAGE_NAME}-${CPACK_PACKAGE_VERSION})
+
+ADD_CUSTOM_TARGET(
+	dist
+	COMMAND git archive --prefix=${ARCHIVE_NAME}/ HEAD
+	| bzip2 > ${CMAKE_CURRENT_BINARY_DIR}/${ARCHIVE_NAME}.tar.bz2
+	WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+# PkgConfig
+SET(prefix      ${CMAKE_INSTALL_PREFIX})
+SET(exec_prefix ${CMAKE_INSTALL_PREFIX}/bin)
+SET(includedir  ${CMAKE_INSTALL_PREFIX}/include/vmime)
+SET(libdir      ${VMIME_INSTALL_LIBDIR})
+
+SET(VMIME_PKGCONFIG_LIBS     "")
+SET(VMIME_PKGCONFIG_CFLAGS   "")
+SET(VMIME_PKGCONFIG_REQUIRES "")
+
 
 ##############################################################################
 # Build type
@@ -732,7 +922,6 @@ ELSE()
 	SET(VMIME_PLATFORM_IS_POSIX ON)
 ENDIF()
 
-MESSAGE(${VMIME_PLATFORM_IS_POSIX}  ${VMIME_PLATFORM_IS_WINDOWS})
 
 ##############################################################################
 # Platform-specific checks
@@ -865,6 +1054,31 @@ ENDIF()
 
 
 ##############################################################################
+# Documentation
+
+OPTION(
+	VMIME_BUILD_DOCUMENTATION
+	"Build documentation"
+	ON
+)
+
+IF(VMIME_BUILD_DOCUMENTATION)
+	FIND_PACKAGE(Doxygen)
+
+	IF(DOXYGEN_FOUND)
+		CONFIGURE_FILE(${CMAKE_CURRENT_SOURCE_DIR}/Doxyfile.in ${CMAKE_CURRENT_BINARY_DIR}/Doxyfile @ONLY)
+
+		# Make a target so that documentation can be generated by running "make doc"
+		ADD_CUSTOM_TARGET(
+			doc
+			${DOXYGEN_EXECUTABLE} ${CMAKE_CURRENT_BINARY_DIR}/Doxyfile
+			WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+			COMMENT "Generating API documentation with Doxygen" VERBATIM
+		)
+	ENDIF(DOXYGEN_FOUND)
+ENDIF(VMIME_BUILD_DOCUMENTATION)
+
+##############################################################################
 # Sanity checks
 
 # Maildir protocol is available only if file-system features are enabled
@@ -883,3 +1097,22 @@ IF(VMIME_HAVE_MESSAGING_PROTO_SENDMAIL)
 		MESSAGE(FATAL_ERROR "Enabling Sendmail protocol requires that you specify path to 'sendmail' binary.")
 	ENDIF()
 ENDIF()
+
+
+##############################################################################
+# Build examples
+
+IF(VMIME_BUILD_SAMPLES)
+	ADD_SUBDIRECTORY(examples)
+ENDIF()
+
+
+# Set our configure file
+CONFIGURE_FILE(cmake/config.hpp.cmake ${CMAKE_CURRENT_SOURCE_DIR}/src/vmime/config.hpp)
+
+# PkgConfig post-configuration
+CONFIGURE_FILE(${CMAKE_CURRENT_SOURCE_DIR}/vmime.pc.in ${CMAKE_CURRENT_BINARY_DIR}/vmime.pc @ONLY)
+INSTALL(FILES ${CMAKE_CURRENT_BINARY_DIR}/vmime.pc DESTINATION "${VMIME_INSTALL_LIBDIR}/pkgconfig" COMPONENT headers)
+
+INCLUDE(CPack)
+
