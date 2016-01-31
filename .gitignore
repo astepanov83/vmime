@@ -239,3 +239,7 @@ Thumbs.db
 #SQLite database
 *.db
 .vs
+
+*.vcxproj*
+*.sln
+Build

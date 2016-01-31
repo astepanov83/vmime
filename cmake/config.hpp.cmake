@@ -27,10 +27,12 @@
 #define VMIME_BYTE_ORDER_BIG_ENDIAN     @VMIME_BYTE_ORDER_BIG_ENDIAN@
 #define VMIME_BYTE_ORDER_LITTLE_ENDIAN  @VMIME_BYTE_ORDER_LITTLE_ENDIAN@
 
+#ifndef WIN32
 // Generic types
 #cmakedefine01 VMIME_HAVE_CSTDINT
 #if VMIME_HAVE_CSTDINT
 #	include <cstdint>
+#endif
 #endif
 
 // -- 8-bit
